@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Face Attendance</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Face Attendance</h1>
+    </header>
+
+    <main>
+      <section class="camera-section">
+        <div class="video-wrapper">
+          <video id="video" autoplay playsinline></video>
+          <canvas id="canvas" width="640" height="480" hidden></canvas>
+          <canvas id="overlay" width="640" height="480"></canvas>
+        </div>
+        <div class="controls">
+          <div class="form-row">
+            <input id="name" type="text" placeholder="Student Name" />
+            <input id="rollNo" type="text" placeholder="Roll Number" />
+          </div>
+          <div class="buttons">
+            <button id="btnRegister">Register Student</button>
+            <button id="btnAttendance">Take Attendance</button>
+            <button id="btnSend">Send Attendance</button>
+          </div>
+          <div class="buttons secondary">
+            <button id="btnClearAttendance" class="btn-warning">Clear Attendance</button>
+            <button id="btnClearAll" class="btn-danger">Clear All Students</button>
+            <button id="btnStats" class="btn-info">Show Stats</button>
+          </div>
+          <div id="help" class="muted">Ensure your face is visible. A rectangle will appear when detected.</div>
+        </div>
+      </section>
+
+      <section class="list-section">
+        <h2>Students <span id="studentCount" class="badge"></span></h2>
+        <div id="stats" class="stats-box" style="display:none;"></div>
+        <div id="students" class="students"></div>
+      </section>
+    </main>
+
+    <footer>
+      <small>Attendance System with MongoDB. Uses LBPH face recognition.</small>
+    </footer>
+
+    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="onOpenCvReady()"></script>
+    <script src="/script.js"></script>
+  </body>
+  </html>
