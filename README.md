@@ -77,7 +77,16 @@ npm start
 ## ⚙️ Configuration
 
 ### Email Setup (Required)
-Create `.env` file with:
+Create `.env` file from template:
+```bash
+# Copy the example file
+cp .env.example .env
+
+# Edit with your credentials
+notepad .env
+```
+
+Configure with your Gmail details:
 ```env
 EMAIL_FROM=your-gmail@gmail.com
 EMAIL_PASSWORD=your-app-password  # 16-character Gmail App Password
@@ -175,6 +184,21 @@ PORT=3000
 - ✅ **Privacy Protection**: Email addresses displayed as username@***
 - ✅ **Environment Variables**: Sensitive data in .env (gitignored)
 - ✅ **MongoDB Local**: Database runs locally by default
+
+### Recent Security Fix (Nov 2024)
+⚠️ **Critical Update**: Removed hardcoded SMTP credentials that were previously exposed in the codebase. The system now properly requires environment variables for all sensitive configuration.
+
+**Action Required if updating from older versions:**
+1. Immediately revoke any exposed Gmail app passwords
+2. Generate new app password at https://myaccount.google.com/apppasswords
+3. Update your `.env` file with new credentials
+4. Verify `.env` is in `.gitignore` before pushing to git
+
+**Security Best Practices:**
+- Never commit credentials to version control
+- Always use `.env` for sensitive data
+- Use `git diff --cached` to verify no credentials before pushing
+- Regularly rotate API keys and passwords
 
 ## 🐛 Troubleshooting
 

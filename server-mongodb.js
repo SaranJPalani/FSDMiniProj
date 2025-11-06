@@ -309,9 +309,13 @@ app.post('/api/send-attendance', async (req, res) => {
     fs.writeFileSync(attendanceCsv, csv);
 
     // Send email
-    const to = process.env.EMAIL_TO || 'saranjpalani@gmail.com';
-    const fromUser = process.env.EMAIL_FROM || 'attendancesender007@gmail.com';
-    const fromPass = process.env.EMAIL_PASSWORD || 'dsqkgbqfosxsmxpz';
+    const to = process.env.EMAIL_TO;
+    const fromUser = process.env.EMAIL_FROM;
+    const fromPass = process.env.EMAIL_PASSWORD;
+
+    if (!fromUser || !fromPass) {
+      throw new Error('Email configuration missing. Please set EMAIL_FROM and EMAIL_PASSWORD in .env file');
+    }
 
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
