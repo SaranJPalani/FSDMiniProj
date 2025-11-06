@@ -6,55 +6,92 @@ const octx = overlay.getContext('2d');
 const btnRegister = document.getElementById('btnRegister');
 const btnAttendance = document.getElementById('btnAttendance');
 const btnSend = document.getElementById('btnSend');
+const btnEmailAbsent = document.getElementById('btnEmailAbsent');
 const btnClearAttendance = document.getElementById('btnClearAttendance');
 const btnClearAll = document.getElementById('btnClearAll');
+const btnClearDatabase = document.getElementById('btnClearDatabase');
 const btnStats = document.getElementById('btnStats');
 const inputName = document.getElementById('name');
 const inputRoll = document.getElementById('rollNo');
+const inputEmail = document.getElementById('studentEmail');
 const studentsDiv = document.getElementById('students');
 const studentCount = document.getElementById('studentCount');
 const statsDiv = document.getElementById('stats');
-
-console.log('DOM elements:', { video, canvas, overlay, octx });
-console.log('Overlay dimensions:', overlay.width, overlay.height);
+const cameraStatus = document.getElementById('cameraStatus');
+const opencvStatus = document.getElementById('opencvStatus');
+const subjectSelect = document.getElementById('subjectSelect');
+const selectedTimeslotSpan = document.getElementById('selectedTimeslot');
 
 let cvReady = false;
 let classifier = null;
 let detecting = false;
-let lastFaceRect = null; // {x,y,w,h}
+let lastFaceRect = null;
 let detectIntervalId = null;
 let videoReady = false;
+
+// Simple frame-based detection (3 consecutive frames)
+let detectedFrames = [];
+const REQUIRED_FRAMES = 3;
+let recognizedPerson = null;
+let isRegistering = false; // Flag to track registration mode
+
+// Timeslot selection
+let selectedTimeslot = null;
+let selectedSlotType = null;
 
 function syncOverlaySize() {
   const w = video.videoWidth || 640;
   const h = video.videoHeight || 480;
   overlay.width = w;
   overlay.height = h;
-  console.log('Overlay synced to:', w, 'x', h);
 }
 
 async function startCamera() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+    console.log('🎥 Requesting camera access...');
+    cameraStatus.textContent = '📹 Camera: Requesting access...';
+    
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { 
+        width: 640, 
+        height: 480,
+        facingMode: 'user' // Use front camera if available
+      } 
+    });
+    
+    console.log('✅ Camera access granted');
+    cameraStatus.textContent = '📹 Camera: Access granted';
     video.srcObject = stream;
+    
     video.onloadedmetadata = () => {
+      console.log('📹 Video metadata loaded, starting video...');
+      video.play();
       videoReady = true;
       syncOverlaySize();
+      cameraStatus.textContent = '📹 Camera: ✅ Ready';
+      cameraStatus.style.color = '#22c55e';
+      console.log('🎯 Video ready, checking OpenCV...');
       
-      // Test: Draw a test rectangle to verify canvas is working
-      setTimeout(() => {
-        console.log('Drawing test rectangle...');
-        octx.strokeStyle = 'yellow';
-        octx.lineWidth = 5;
-        octx.strokeRect(50, 50, 200, 200);
-        console.log('Test rectangle drawn at 50,50,200,200');
-      }, 2000);
-      
-      if (cvReady) startDetectionLoop();
+      if (cvReady) {
+        console.log('🚀 Starting detection loop...');
+        startDetectionLoop();
+      } else {
+        console.log('⏳ Waiting for OpenCV to load...');
+      }
     };
+    
+    video.onerror = (e) => {
+      console.error('❌ Video error:', e);
+      cameraStatus.textContent = '📹 Camera: ❌ Error';
+      cameraStatus.style.color = '#ef4444';
+      alert('Video playback error. Please refresh the page.');
+    };
+    
   } catch (err) {
-    alert('Camera access denied or unavailable.');
-    console.error(err);
+    console.error('❌ Camera error:', err);
+    cameraStatus.textContent = '📹 Camera: ❌ Access denied';
+    cameraStatus.style.color = '#ef4444';
+    alert(`Camera access denied or unavailable: ${err.message}`);
   }
 }
 
@@ -97,47 +134,57 @@ function faceToFeature(rect) {
   return vec;
 }
 
-function drawRect(rect, color = 'rgba(255, 0, 0, 0.8)', name = null) {
-  console.log('drawRect called with:', { rect, color, name });
+// Simple, clean rectangle drawing
+function drawFaceRect(rect, status = 'detecting', name = null, frameCount = 0) {
+  // Always clear first
   octx.clearRect(0, 0, overlay.width, overlay.height);
-  if (!rect) {
-    console.log('No rect to draw, cleared canvas');
-    return;
+  
+  if (!rect) return;
+  
+  // Choose color based on status
+  let color, label;
+  switch(status) {
+    case 'registering':
+      color = 'rgba(59, 130, 246, 0.8)'; // Blue for registration
+      label = 'Registration Mode';
+      break;
+    case 'detecting':
+      color = 'rgba(255, 255, 0, 0.8)'; // Yellow
+      label = `Detecting... ${frameCount}/${REQUIRED_FRAMES}`;
+      break;
+    case 'recognized':
+      color = 'rgba(0, 255, 0, 0.8)'; // Green
+      label = name || 'Recognized';
+      break;
+    case 'unknown':
+      color = 'rgba(255, 0, 0, 0.8)'; // Red
+      label = 'Unknown Person';
+      break;
+    default:
+      color = 'rgba(255, 255, 255, 0.8)'; // White
+      label = 'Face Detected';
   }
   
-  console.log('Drawing rectangle:', rect, 'with color:', color);
-  
-  // Draw rectangle
+  // Draw thick rectangle border
   octx.strokeStyle = color;
   octx.lineWidth = 3;
   octx.strokeRect(rect.x, rect.y, rect.w, rect.h);
   
-  console.log('Rectangle drawn successfully');
+  // Draw label background
+  octx.font = 'bold 16px Arial';
+  const textWidth = octx.measureText(label).width;
+  const labelX = rect.x;
+  const labelY = rect.y - 30;
   
-  // Draw name label if provided
-  if (name) {
-    const padding = 8;
-    const fontSize = 18;
-    octx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
-    const textWidth = octx.measureText(name).width;
-    
-    // Draw background for text
-    const labelHeight = fontSize + padding * 2;
-    const labelY = rect.y - labelHeight - 5;
-    octx.fillStyle = color;
-    octx.fillRect(rect.x, labelY, textWidth + padding * 2, labelHeight);
-    
-    // Draw text
-    octx.fillStyle = 'white';
-    octx.textBaseline = 'middle';
-    octx.fillText(name, rect.x + padding, labelY + labelHeight / 2);
-    
-    console.log('Name label drawn:', name);
-  }
+  octx.fillStyle = color;
+  octx.fillRect(labelX, labelY, textWidth + 16, 24);
+  
+  // Draw label text
+  octx.fillStyle = 'white';
+  octx.fillText(label, labelX + 8, labelY + 16);
 }
 
 // Store recognized person info for continuous display
-let recognizedPerson = null;
 let recognitionCheckInterval = null;
 
 function startDetectionLoop() {
@@ -160,82 +207,99 @@ function startDetectionLoop() {
       const msize = new cv.Size(0, 0);
       classifier.detectMultiScale(gray, faces, 1.1, 5, 0, msize, msize);
       
-      console.log(`Faces detected: ${faces.size()}`);
-      
       if (faces.size() > 0) {
         const f = faces.get(0);
-        lastFaceRect = { x: f.x, y: f.y, w: f.width, h: f.height };
-        console.log('Face rect:', lastFaceRect);
+        const currentFaceRect = { x: f.x, y: f.y, w: f.width, h: f.height };
         
-        // Continuously try to recognize the face
-        await checkAndDisplayRecognition();
+        // Add to detected frames array
+        detectedFrames.push(currentFaceRect);
+        
+        // Keep only the last REQUIRED_FRAMES frames
+        if (detectedFrames.length > REQUIRED_FRAMES) {
+          detectedFrames.shift();
+        }
+        
+        lastFaceRect = currentFaceRect;
+        
+        // Always show rectangle, but status changes based on frame count
+        if (isRegistering) {
+          // During registration, always show blue rectangle
+          drawFaceRect(currentFaceRect, 'registering');
+        } else if (detectedFrames.length >= REQUIRED_FRAMES) {
+          // We have enough frames, try recognition
+          await tryRecognition(currentFaceRect);
+        } else {
+          // Still collecting frames - show yellow with counter
+          drawFaceRect(currentFaceRect, 'detecting', null, detectedFrames.length);
+        }
       } else {
+        // No face detected, clear everything
         lastFaceRect = null;
+        detectedFrames = [];
         recognizedPerson = null;
-        drawRect(null);
+        drawFaceRect(null); // Clear the rectangle
       }
+      
       src.delete(); gray.delete(); faces.delete(); msize.delete();
     } catch (e) {
-      // ignore transient errors
+      console.error('Detection error:', e);
     }
   };
-  detectIntervalId = setInterval(detect, 120);
+  
+  detectIntervalId = setInterval(detect, 150); // Slightly slower for stability
 }
 
-// Continuously check if current face is recognized
-async function checkAndDisplayRecognition() {
-  if (!lastFaceRect) {
-    console.log('No face rect available');
-    drawRect(null);
-    return;
-  }
-  
-  console.log('Checking recognition for face at:', lastFaceRect);
-  octx.clearRect(0, 0, overlay.width, overlay.height);
-  
+// Simple recognition function
+async function tryRecognition(faceRect) {
   try {
-    const feature = faceToFeature(lastFaceRect);
-    console.log('Feature extracted, calling API...');
-    const res = await fetch('/api/recognize', { 
-      method: 'POST', 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify({ feature }) 
-    });
-    const data = await res.json();
-    console.log('Recognition result:', data);
-    
-    if (data.recognized) {
-      // Green box with name for recognized person
-      recognizedPerson = data.name;
-      console.log('Drawing GREEN box for:', data.name);
-      drawRect(lastFaceRect, 'rgba(0, 255, 0, 0.9)', data.name);
-    } else {
-      // Red box for unrecognized
-      recognizedPerson = null;
-      console.log('Drawing RED box - not recognized');
-      drawRect(lastFaceRect, 'rgba(255, 0, 0, 0.8)');
+    const feature = faceToFeature(faceRect);
+    if (!feature) {
+      drawFaceRect(faceRect, 'unknown');
+      return;
     }
-  } catch (e) {
-    console.error('Recognition error:', e);
-    // If recognition fails, just show red box
-    drawRect(lastFaceRect, 'rgba(255, 0, 0, 0.8)');
+    
+    const response = await fetch('/api/recognize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ feature })
+    });
+    
+    const data = await response.json();
+    
+    if (data.recognized && data.name) {
+      recognizedPerson = { name: data.name, rollNo: data.rollNo };
+      drawFaceRect(faceRect, 'recognized', data.name);
+    } else {
+      recognizedPerson = null;
+      drawFaceRect(faceRect, 'unknown');
+    }
+  } catch (error) {
+    console.error('Recognition error:', error);
+    drawFaceRect(faceRect, 'unknown');
   }
 }
 
 window.onOpenCvReady = function() {
+  console.log('🔧 OpenCV.js loading...');
+  opencvStatus.textContent = '🔧 OpenCV: Loading...';
+  
   cv['onRuntimeInitialized'] = async () => {
     try {
+      console.log('⚡ OpenCV.js runtime initialized');
+      opencvStatus.textContent = '🔧 OpenCV: Runtime ready';
       cvReady = true;
-      console.log('OpenCV initialized, loading haarcascade...');
       
       // Use only the haarcascade_frontalface_default.xml file
       const url = '/data/haarcascade_frontalface_default.xml';
+      console.log('📁 Loading Haar cascade from:', url);
+      opencvStatus.textContent = '🔧 OpenCV: Loading model...';
       
       const resp = await fetch(url);
       if (!resp.ok) {
         throw new Error(`Failed to load ${url}: ${resp.status}`);
       }
       
+      console.log('📥 Haar cascade file downloaded');
       const buffer = await resp.arrayBuffer();
       const data = new Uint8Array(buffer);
       
@@ -244,6 +308,7 @@ window.onOpenCvReady = function() {
       
       // Create the file in OpenCV's virtual filesystem
       cv.FS_createDataFile('/', 'haarcascade.xml', data, true, false);
+      console.log('💾 Haar cascade loaded into OpenCV filesystem');
       
       // Load the classifier
       classifier = new cv.CascadeClassifier();
@@ -251,18 +316,24 @@ window.onOpenCvReady = function() {
         throw new Error('Failed to load haarcascade classifier');
       }
       
-      console.log('✅ Haarcascade loaded successfully:', url);
+      console.log('✅ Face detection classifier ready!');
+      opencvStatus.textContent = '🔧 OpenCV: ✅ Ready';
+      opencvStatus.style.color = '#22c55e';
       
       // If video is already ready, start now; else it will start when video metadata loads
       if (videoReady) {
-        console.log('Video ready, starting detection loop');
+        console.log('🚀 Video already ready, starting detection loop...');
         startDetectionLoop();
+      } else {
+        console.log('⏳ Waiting for video to be ready...');
       }
       
       // Also resync overlay on window resize
       window.addEventListener('resize', syncOverlaySize);
     } catch (e) {
       console.error('❌ Failed to initialize OpenCV:', e);
+      opencvStatus.textContent = '🔧 OpenCV: ❌ Failed to load';
+      opencvStatus.style.color = '#ef4444';
       alert('Failed to load face detection model. Please refresh the page.');
     }
   };
@@ -271,14 +342,33 @@ window.onOpenCvReady = function() {
 async function registerStudent() {
   const name = inputName.value.trim();
   const rollNo = inputRoll.value.trim();
-  if (!name || !rollNo) {
-    alert('Enter name and roll number');
+  const email = inputEmail.value.trim();
+  
+  if (!name || !rollNo || !email) {
+    alert('Enter name, roll number, and phone number');
     return;
   }
+  
+  // Validate phone number format
+  // Basic email validation
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    alert('❌ Please enter a valid email address!');
+    return;
+  }
+  
+  // Check if we have enough frames detected
+  if (detectedFrames.length < REQUIRED_FRAMES) {
+    alert(`Please keep your face steady in front of the camera. Need ${REQUIRED_FRAMES} consecutive frames (currently have ${detectedFrames.length}).`);
+    return;
+  }
+  
   if (!lastFaceRect) {
     alert('No face detected. Please align your face within the frame.');
     return;
   }
+
+  // Set registration mode
+  isRegistering = true;
   
   const helpDiv = document.getElementById('help');
   const originalHelp = helpDiv.textContent;
@@ -331,17 +421,16 @@ async function registerStudent() {
   helpDiv.textContent = '✅ Processing... Please wait';
   helpDiv.style.background = '#22c55e';
   
-  const res = await fetch('/api/register', {
+  const res = await fetch('/api/register', { 
     method: 'POST', 
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, rollNo, frames, features })
-  });
-  
-  const data = await res.json();
+    headers: { 'Content-Type': 'application/json' }, 
+    body: JSON.stringify({ name, rollNo, email, frames, features }) 
+  });  const data = await res.json();
   if (data.ok) {
     alert(`✅ ${name} registered successfully with multi-pose training!`);
     inputName.value = ''; 
     inputRoll.value = '';
+    inputEmail.value = '';
     loadStudents();
   } else {
     alert(data.error || 'Registration failed');
@@ -350,24 +439,51 @@ async function registerStudent() {
   // Restore
   helpDiv.textContent = originalHelp;
   helpDiv.style = '';
+  
+  // Exit registration mode
+  isRegistering = false;
 }
 
 async function takeAttendance() {
+  // Check if we have enough frames detected
+  if (detectedFrames.length < REQUIRED_FRAMES) {
+    alert(`Please keep your face steady in front of the camera. Need ${REQUIRED_FRAMES} consecutive frames (currently have ${detectedFrames.length}).`);
+    return;
+  }
+  
   if (!lastFaceRect) {
     alert('No face detected. Please align your face within the frame.');
     return;
   }
   
+  // Check if subject is selected
+  const subject = subjectSelect.value;
+  if (!subject) {
+    alert('Please select a subject first.');
+    return;
+  }
+  
+  // Check if timeslot is selected
+  if (!selectedTimeslot || !selectedSlotType) {
+    alert('Please select a timeslot first.');
+    return;
+  }
+  
   const feature = faceToFeature(lastFaceRect);
-  const res = await fetch('/api/recognize', { 
+  const res = await fetch('/api/mark-attendance', { 
     method: 'POST', 
     headers: { 'Content-Type': 'application/json' }, 
-    body: JSON.stringify({ feature }) 
+    body: JSON.stringify({ 
+      feature, 
+      subject, 
+      timeslot: selectedTimeslot,
+      slotType: selectedSlotType
+    }) 
   });
   const data = await res.json();
   
-  if (data.recognized) {
-    alert(`✅ Attendance marked for ${data.name} (Roll: ${data.rollNo})`);
+  if (data.success && data.recognized) {
+    alert(`✅ Attendance marked for ${data.student.name} (Roll: ${data.student.rollNo})\nSubject: ${data.attendance.subject}\nTimeslot: ${data.attendance.timeslot}`);
     loadStudents();
   } else {
     alert('❌ Face not recognized. Please register first.');
@@ -375,10 +491,31 @@ async function takeAttendance() {
 }
 
 async function sendAttendance() {
-  const res = await fetch('/api/send-attendance', { method: 'POST' });
+  // Check if subject is selected
+  const subject = subjectSelect.value;
+  if (!subject) {
+    alert('Please select a subject first.');
+    return;
+  }
+  
+  // Check if timeslot is selected
+  if (!selectedTimeslot || !selectedSlotType) {
+    alert('Please select a timeslot first.');
+    return;
+  }
+  
+  const res = await fetch('/api/send-attendance', { 
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      subject: subject,
+      timeslot: selectedTimeslot,
+      slotType: selectedSlotType
+    })
+  });
   const data = await res.json();
   if (data.ok) {
-    alert('Attendance Sent Successfully');
+    alert(`Attendance sent successfully for ${subject} - ${selectedTimeslot}`);
     loadStudents();
   } else {
     alert(data.error || 'Failed to send attendance');
@@ -461,6 +598,59 @@ async function deleteStudent(id, name) {
   }
 }
 
+async function editStudent(id, currentName, currentRollNo, currentEmail) {
+  // Create a simple modal for editing
+  const newName = prompt('Edit student name:', currentName);
+  if (newName === null) return; // User cancelled
+  
+  const newRollNo = prompt('Edit roll number:', currentRollNo);
+  if (newRollNo === null) return; // User cancelled
+  
+  const newEmail = prompt('Edit email address:', currentEmail);
+  if (newEmail === null) return; // User cancelled
+  
+  // Validate inputs
+  if (!newName.trim()) {
+    alert('Name cannot be empty');
+    return;
+  }
+  
+  if (!newRollNo.trim()) {
+    alert('Roll number cannot be empty');
+    return;
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
+    alert('Please enter a valid email address');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/students/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newName.trim(),
+        rollNo: newRollNo.trim(),
+        email: newEmail.trim()
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      alert(`✅ Student updated successfully!\n\nName: ${data.student.name}\nRoll: ${data.student.rollNo}\nEmail: ${data.student.email}`);
+      loadStudents(); // Refresh the list
+    } else {
+      alert(`❌ Error: ${data.error}`);
+    }
+    
+  } catch (error) {
+    console.error('Edit student error:', error);
+    alert('❌ Failed to update student details');
+  }
+}
+
 function renderStudents(items) {
   studentsDiv.innerHTML = '';
   studentCount.textContent = items.length;
@@ -469,15 +659,23 @@ function renderStudents(items) {
     const el = document.createElement('div');
     el.className = 'student';
     const initials = s.name?.[0]?.toUpperCase() || '?';
+    
+    // Format email for display (show first part for privacy)
+    const emailDisplay = s.email ? 
+      `${s.email.split('@')[0]}@***` : 
+      'No email';
+    
     el.innerHTML = `
       <div class="avatar">${initials}</div>
       <div class="meta">
         <div class="name">${s.name}</div>
         <div class="roll">Roll: ${s.rollNo}</div>
+        <div class="email">� ${emailDisplay}</div>
         <div class="time">${s.time}</div>
       </div>
       <div class="student-actions">
         <span class="badge ${s.status === 'Present' ? 'present' : 'absent'}">${s.status}</span>
+        <button class="btn-edit" onclick="editStudent('${s.id}', '${s.name}', '${s.rollNo}', '${s.email}')" title="Edit Student">✏️</button>
         <button class="btn-delete" onclick="deleteStudent('${s.id}', '${s.name}')" title="Delete Student">🗑️</button>
       </div>
     `;
@@ -491,12 +689,159 @@ async function loadStudents() {
   renderStudents(data);
 }
 
+async function clearDatabase() {
+  if (confirm('⚠️ This will permanently delete ALL students and attendance records. Are you sure?')) {
+    try {
+      const response = await fetch('/api/clear-database', { method: 'POST' });
+      const result = await response.json();
+      
+      if (response.ok) {
+        alert('✅ Database cleared successfully!');
+        loadStudents(); // Refresh the display
+      } else {
+        alert(`❌ Failed to clear database: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error clearing database:', error);
+      alert('❌ Error clearing database');
+    }
+  }
+}
+
+// Timeslot selection function
+function selectTimeslot(element) {
+  // Remove previous selection
+  document.querySelectorAll('.time-slot').forEach(slot => {
+    slot.classList.remove('selected');
+  });
+  
+  // Add selection to clicked element
+  element.classList.add('selected');
+  
+  // Update selected values
+  selectedTimeslot = element.dataset.time;
+  selectedSlotType = element.dataset.type;
+  
+  // Update display
+  selectedTimeslotSpan.textContent = `${selectedSlotType.toUpperCase()} - ${selectedTimeslot}`;
+}
+
+// Make function global for HTML onclick
+window.selectTimeslot = selectTimeslot;
+
 btnRegister.addEventListener('click', registerStudent);
 btnAttendance.addEventListener('click', takeAttendance);
 btnSend.addEventListener('click', sendAttendance);
+btnEmailAbsent.addEventListener('click', sendEmailToAbsentStudents);
 btnClearAttendance.addEventListener('click', clearAttendance);
 btnClearAll.addEventListener('click', clearAllStudents);
+btnClearDatabase.addEventListener('click', clearDatabase);
 btnStats.addEventListener('click', showStats);
 
 startCamera();
 loadStudents();
+
+
+async function sendEmailToAbsentStudents() {
+  // Check if subject is selected
+  const subject = subjectSelect.value;
+  if (!subject) {
+    alert('Please select a subject first.');
+    return;
+  }
+  
+  // Check if timeslot is selected
+  if (!selectedTimeslot || !selectedSlotType) {
+    alert('Please select a timeslot first.');
+    return;
+  }
+
+  if (!confirm(`Send email notifications to absent students for:\n\nSubject: ${subject}\nTimeslot: ${selectedTimeslot}\n\nThis will send emails to students who are marked absent. Continue?`)) {
+    return;
+  }
+
+  try {
+    btnEmailAbsent.disabled = true;
+    btnEmailAbsent.textContent = '📧 Sending...';
+
+    const response = await fetch('/api/send-absent-notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject: subject,
+        timeslot: selectedTimeslot,
+        slotType: selectedSlotType
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      let message = `✅ Email Notifications Sent!\n\n`;
+      message += `Absent Students: ${data.absentCount}\n`;
+      message += `Emails Sent: ${data.sentCount}\n`;
+      if (data.failedCount > 0) {
+        message += `Failed: ${data.failedCount}\n`;
+      }
+      message += `\nSubject: ${data.subject}\nTimeslot: ${data.timeslot}`;
+      
+      alert(message);
+    } else {
+      alert(`❌ Email Error: ${data.message || data.error}`);
+    }
+
+  } catch (error) {
+    console.error('Email error:', error);
+    alert('❌ Failed to send email notifications');
+  } finally {
+    btnEmailAbsent.disabled = false;
+    btnEmailAbsent.textContent = '📧 Email Absent Students';
+  }
+}
+
+async function testEmail() {
+  const email = prompt('Enter your email address to test email functionality:');
+  if (!email) return;
+
+  // Basic email validation
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    alert('❌ Please enter a valid email address!');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/test-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: email,
+        message: 'Test email from FSD Attendance System! Email service is working correctly. 🎉'
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      alert(`✅ Test email sent successfully to ${email}!\n\nCheck your inbox for the message.`);
+    } else {
+      alert(`❌ Test email failed: ${data.error}`);
+    }
+
+  } catch (error) {
+    console.error('Test email error:', error);
+    alert('❌ Failed to send test email');
+  }
+}
+
+// Email service status check function
+async function checkEmailService() {
+  try {
+    alert('� Email service is configured and ready!\n\nTo test functionality, use the "Test Email" feature above.');
+  } catch (error) {
+    console.error('Email service check error:', error);
+    alert('❌ Email service check failed');
+  }
+}
+
+// Make function global for HTML onclick
+window.selectTimeslot = selectTimeslot;

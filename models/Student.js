@@ -10,6 +10,17 @@ const studentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  email: {
+    type: String,
+    required: true,
+    trim: true,
+    validate: {
+      validator: function(v) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+      },
+      message: 'Please provide a valid email address'
+    }
+  },
   // Store LBPH feature vector for face recognition
   faceVector: {
     type: [Number],

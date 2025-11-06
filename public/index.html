@@ -23,17 +23,85 @@
             <input id="name" type="text" placeholder="Student Name" />
             <input id="rollNo" type="text" placeholder="Roll Number" />
           </div>
+          <div class="form-row">
+            <input id="studentEmail" type="email" placeholder="Student's Email Address" />
+          </div>
+          
+          <!-- Subject and Timeslot Selection -->
+          <div class="form-row">
+            <select id="subjectSelect" required>
+              <option value="">Select Subject</option>
+              <option value="Database Management System">Database Management System</option>
+              <option value="Full Stack Development">Full Stack Development</option>
+              <option value="Probabilistic Reasoning">Probabilistic Reasoning</option>
+              <option value="Introduction to Cloud Computing">Introduction to Cloud Computing</option>
+              <option value="Formal Language and Automata">Formal Language and Automata</option>
+              <option value="Deep Learning">Deep Learning</option>
+              <option value="Life Skills for Engineers">Life Skills for Engineers</option>
+              <option value="Forensics">Forensics</option>
+            </select>
+          </div>
+          
+          <div class="timeslot-container">
+            <h3>Select Timeslot:</h3>
+            <div class="timetable">
+              <!-- Theory Row -->
+              <div class="time-slot theory-slot" data-type="theory" data-time="8:10-9:00" onclick="selectTimeslot(this)">
+                Theory<br>8:10-9:00
+              </div>
+              <div class="time-slot theory-slot" data-type="theory" data-time="9:00-9:50" onclick="selectTimeslot(this)">
+                Theory<br>9:00-9:50
+              </div>
+              <div class="time-slot theory-slot" data-type="theory" data-time="10:00-10:50" onclick="selectTimeslot(this)">
+                Theory<br>10:00-10:50 
+              </div>
+              <div class="break-separator">BREAK<br>10:40-11:00</div>
+              <div class="time-slot theory-slot" data-type="theory" data-time="11:00-11:50" onclick="selectTimeslot(this)">
+                Theory<br>11:00-11:50
+              </div>
+              <div class="time-slot theory-slot" data-type="theory" data-time="11:50-12:40" onclick="selectTimeslot(this)">
+                Theory<br>11:50-12:40
+              </div>
+              <div class="break-separator lunch">LUNCH<br>12:40-2:00</div>
+              <div class="time-slot theory-slot" data-type="theory" data-time="2:00-2:50" onclick="selectTimeslot(this)">
+                Theory<br>2:00-2:50
+              </div>
+              <div class="time-slot theory-slot" data-type="theory" data-time="2:50-3:40" onclick="selectTimeslot(this)">
+                Theory<br>2:50-3:40
+              </div>
+              
+              <!-- Lab Row - 3 Sessions -->
+              <div class="time-slot lab-slot lab-morning" data-type="lab" data-time="8:10-11:50" onclick="selectTimeslot(this)">
+                Lab Session<br>8:10-11:50
+              </div>
+              <div class="time-slot lab-slot lab-midday" data-type="lab" data-time="11:50-2:00" onclick="selectTimeslot(this)">
+                Lab Session<br>11:50-2:00
+              </div>
+              <div class="time-slot lab-slot lab-afternoon" data-type="lab" data-time="2:00-3:40" onclick="selectTimeslot(this)">
+                Lab Session<br>2:00-3:40
+              </div>
+            </div>
+            <div class="selected-timeslot">
+              <strong>Selected:</strong> <span id="selectedTimeslot">None</span>
+            </div>
+          </div>
           <div class="buttons">
             <button id="btnRegister">Register Student</button>
             <button id="btnAttendance">Take Attendance</button>
             <button id="btnSend">Send Attendance</button>
+            <button id="btnEmailAbsent">📧 Email Absent Students</button>
           </div>
           <div class="buttons secondary">
             <button id="btnClearAttendance" class="btn-warning">Clear Attendance</button>
             <button id="btnClearAll" class="btn-danger">Clear All Students</button>
+            <button id="btnClearDatabase" class="btn-danger">Clear Database</button>
             <button id="btnStats" class="btn-info">Show Stats</button>
           </div>
           <div id="help" class="muted">Ensure your face is visible. A rectangle will appear when detected.</div>
+          <div id="status" class="status">
+            <span id="cameraStatus">📹 Camera: Loading...</span>
+            <span id="opencvStatus">🔧 OpenCV: Loading...</span>
+          </div>
         </div>
       </section>
 
