@@ -131,8 +131,10 @@ app.post('/api/recognize', async (req, res) => {
       }
     }
 
-    // Recognition threshold (tune based on your needs)
-    const THRESHOLD = 0.18;
+    // Recognition threshold optimized for 5-10 students
+    const THRESHOLD = 0.15; // Balanced for multiple students while preventing false positives
+    
+    console.log(`Recognition attempt: bestDist=${bestDist.toFixed(4)}, threshold=${THRESHOLD}, student=${bestStudent?.name || 'none'}`);
     
     if (!bestStudent || bestDist > THRESHOLD) {
       return res.json({ recognized: false, name: 'not recognized', distance: bestDist });
@@ -189,7 +191,9 @@ app.post('/api/mark-attendance', async (req, res) => {
       }
     }
 
-    const THRESHOLD = 0.18;
+    const THRESHOLD = 0.15; // Balanced for multiple students while preventing false positives
+    
+    console.log(`Attendance recognition: bestDist=${bestDist.toFixed(4)}, threshold=${THRESHOLD}, student=${bestStudent?.name || 'none'}`);
     
     if (!bestStudent || bestDist > THRESHOLD) {
       return res.json({ recognized: false, message: 'Face not recognized', distance: bestDist });
@@ -321,7 +325,10 @@ app.post('/api/send-attendance', async (req, res) => {
       host: 'smtp.gmail.com',
       port: 587,
       secure: false,
-      auth: { user: fromUser, pass: fromPass }
+      auth: { user: fromUser, pass: fromPass },
+      tls: {
+        rejectUnauthorized: false
+      }
     });
 
     await transporter.sendMail({

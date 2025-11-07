@@ -2,12 +2,17 @@ const nodemailer = require('nodemailer');
 
 class EmailService {
   constructor() {
-    // Use existing email configuration
+    // Use explicit SMTP configuration for better reliability
     this.transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // true for 465, false for other ports
       auth: {
-        user: process.env.EMAIL_FROM || process.env.EMAIL_USER, // Use existing EMAIL_FROM
-        pass: process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS  // Use existing EMAIL_PASSWORD
+        user: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS
+      },
+      tls: {
+        rejectUnauthorized: false // Allow self-signed certificates
       }
     });
 
