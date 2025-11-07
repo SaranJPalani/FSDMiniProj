@@ -1,13 +1,3 @@
-/*
-  server.js - Express backend with MongoDB for attendance system
-  Features:
-  - Register Student: capture face data, train LBPH model, save to MongoDB
-  - Take Attendance: recognize faces and mark present in current session
-  - Send Attendance: email attendance sheet for current session
-  - Clear Attendance: reset attendance for new class
-  - Delete Students: remove student data when needed
-*/
-
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
